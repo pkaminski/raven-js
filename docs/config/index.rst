@@ -7,7 +7,7 @@ We must first configure Sentry to allow certain hosts to report errors. This pre
 
 This can be found under the *Project Details* page in Sentry.
 
-.. image:: http://i.imgur.com/S09MeSM.png
+.. image:: https://i.imgur.com/S09MeSM.png
 
 Now need to set up Raven.js to use your Sentry DSN.
 
@@ -77,7 +77,7 @@ Does not affect captureMessage or when non-error object is passed in as argument
 ignoreUrls
 ----------
 
-The inverse of ``whitelistUrls`` and similar to ``ignoreErrors``, but will ignore errors from whole urls patching a regex pattern or an exact string.
+The inverse of ``whitelistUrls`` and similar to ``ignoreErrors``, but will ignore errors from whole urls matching a regex pattern or an exact string.
 
 .. code-block:: javascript
 
