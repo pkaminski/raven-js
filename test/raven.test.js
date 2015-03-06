@@ -8,6 +8,7 @@ function flushRavenState() {
     globalProject = undefined;
     globalOptions = {
         logger: 'javascript',
+        release: undefined,
         ignoreErrors: [],
         ignoreUrls: [],
         whitelistUrls: [],
@@ -56,21 +57,23 @@ describe('TraceKit', function(){
             // named functions and anonymous functions
             var stack_str = "" +
                 "  Error: \n" +
-                "    at namedFunc0 (http://example.com/js/script.js:10)\n" +   // stack[0]
-                "    at http://example.com/js/test.js:65\n" +                  // stack[1]
-                "    at namedFunc2 (http://example.com/js/script.js:20)\n" +   // stack[2]
-                "    at http://example.com/js/test.js:67\n" +                  // stack[3]
-                "    at namedFunc4 (http://example.com/js/script.js:100001)";  // stack[4]
+                "    at new <anonymous> (http://example.com/js/test.js:63)\n" + // stack[0]
+                "    at namedFunc0 (http://example.com/js/script.js:10)\n" +    // stack[1]
+                "    at http://example.com/js/test.js:65\n" +                   // stack[2]
+                "    at namedFunc2 (http://example.com/js/script.js:20)\n" +    // stack[3]
+                "    at http://example.com/js/test.js:67\n" +                   // stack[4]
+                "    at namedFunc4 (http://example.com/js/script.js:100001)";   // stack[5]
             var mock_err = { stack: stack_str };
             var trace = TraceKit.computeStackTrace.computeStackTraceFromStackProp(mock_err);
 
             // Make sure TraceKit didn't remove the anonymous functions
             // from the stack like it used to :)
-            assert.equal(trace.stack[0].func, 'namedFunc0');
-            assert.equal(trace.stack[1].func, '?');
-            assert.equal(trace.stack[2].func, 'namedFunc2');
-            assert.equal(trace.stack[3].func, '?');
-            assert.equal(trace.stack[4].func, 'namedFunc4');
+            assert.equal(trace.stack[0].func, 'new <anonymous>');
+            assert.equal(trace.stack[1].func, 'namedFunc0');
+            assert.equal(trace.stack[2].func, '?');
+            assert.equal(trace.stack[3].func, 'namedFunc2');
+            assert.equal(trace.stack[4].func, '?');
+            assert.equal(trace.stack[5].func, 'namedFunc4');
         });
     });
     describe('error notifications', function(){
@@ -829,15 +832,13 @@ describe('globals', function() {
 
             globalProject = '2';
             globalOptions = {
-                logger: 'javascript',
-                site: 'THE BEST'
+                logger: 'javascript'
             };
 
             send({foo: 'bar'});
             assert.deepEqual(window.makeRequest.lastCall.args[0], {
                 project: '2',
                 logger: 'javascript',
-                site: 'THE BEST',
                 platform: 'javascript',
                 request: {
                     url: 'http://localhost/?a=b',
@@ -861,8 +862,7 @@ describe('globals', function() {
 
             globalProject = '2';
             globalOptions = {
-                logger: 'javascript',
-                site: 'THE BEST'
+                logger: 'javascript'
             };
 
             globalUser = {name: 'Matt'};
@@ -871,7 +871,6 @@ describe('globals', function() {
             assert.deepEqual(window.makeRequest.lastCall.args, [{
                 project: '2',
                 logger: 'javascript',
-                site: 'THE BEST',
                 platform: 'javascript',
                 request: {
                     url: 'http://localhost/?a=b',
@@ -899,7 +898,6 @@ describe('globals', function() {
             globalProject = '2';
             globalOptions = {
                 logger: 'javascript',
-                site: 'THE BEST',
                 tags: {tag1: 'value1'}
             };
 
@@ -908,7 +906,6 @@ describe('globals', function() {
             assert.deepEqual(window.makeRequest.lastCall.args, [{
                 project: '2',
                 logger: 'javascript',
-                site: 'THE BEST',
                 platform: 'javascript',
                 request: {
                     url: 'http://localhost/?a=b',
@@ -922,7 +919,6 @@ describe('globals', function() {
             }]);
             assert.deepEqual(globalOptions, {
                 logger: 'javascript',
-                site: 'THE BEST',
                 tags: {tag1: 'value1'}
             });
         });
@@ -938,7 +934,6 @@ describe('globals', function() {
             globalProject = '2';
             globalOptions = {
                 logger: 'javascript',
-                site: 'THE BEST',
                 extra: {key1: 'value1'}
             };
 
@@ -947,7 +942,6 @@ describe('globals', function() {
             assert.deepEqual(window.makeRequest.lastCall.args, [{
                 project: '2',
                 logger: 'javascript',
-                site: 'THE BEST',
                 platform: 'javascript',
                 request: {
                     url: 'http://localhost/?a=b',
@@ -960,7 +954,6 @@ describe('globals', function() {
             }]);
             assert.deepEqual(globalOptions, {
                 logger: 'javascript',
-                site: 'THE BEST',
                 extra: {key1: 'value1'}
             });
         });
@@ -972,7 +965,6 @@ describe('globals', function() {
             globalOptions = {
                 projectId: 2,
                 logger: 'javascript',
-                site: 'THE BEST',
                 dataCallback: function() {
                     return {lol: 'ibrokeit'};
                 }
@@ -998,7 +990,6 @@ describe('globals', function() {
             globalOptions = {
                 projectId: 2,
                 logger: 'javascript',
-                site: 'THE BEST',
                 tags: {}
             };
 
@@ -1006,7 +997,38 @@ describe('globals', function() {
             assert.deepEqual(window.makeRequest.lastCall.args[0], {
                 project: '2',
                 logger: 'javascript',
-                site: 'THE BEST',
+                platform: 'javascript',
+                request: {
+                    url: 'http://localhost/?a=b',
+                    headers: {
+                        'User-Agent': 'lolbrowser'
+                    }
+                },
+                event_id: 'abc123',
+                foo: 'bar',
+                extra: {'session:duration': 100}
+            });
+        });
+
+        it('should attach release if available', function() {
+            this.sinon.stub(window, 'isSetup').returns(true);
+            this.sinon.stub(window, 'makeRequest');
+            this.sinon.stub(window, 'getHttpData').returns({
+                url: 'http://localhost/?a=b',
+                headers: {'User-Agent': 'lolbrowser'}
+            });
+
+            globalOptions = {
+                projectId: 2,
+                logger: 'javascript',
+                release: 'abc123',
+            };
+
+            send({foo: 'bar'});
+            assert.deepEqual(window.makeRequest.lastCall.args[0], {
+                project: '2',
+                release: 'abc123',
+                logger: 'javascript',
                 platform: 'javascript',
                 request: {
                     url: 'http://localhost/?a=b',
@@ -1571,6 +1593,19 @@ describe('Raven (public API)', function() {
         });
     });
 
+    describe('.setReleaseContext', function() {
+        it('should set the globalOptions.release attribute', function() {
+            Raven.setReleaseContext('abc123');
+            assert.equal(globalOptions.release, 'abc123');
+        });
+
+        it('should clear globalOptions.release with no arguments', function() {
+            globalOptions.release = 'abc123';
+            Raven.setReleaseContext();
+            assert.isUndefined(globalOptions.release);
+        });
+    });
+
     describe('.captureMessage', function() {
         it('should work as advertised', function() {
             this.sinon.stub(window, 'send');
@@ -1604,6 +1639,18 @@ describe('Raven (public API)', function() {
             setupRaven();
             Raven.captureMessage('lol');
             assert.equal(Raven.lastEventId(), 'abc123');
+        });
+
+        it('should respect `ignoreErrors`', function() {
+            this.sinon.stub(window, 'send');
+
+            globalOptions.ignoreErrors = joinRegExp(['e1', 'e2']);
+            Raven.captureMessage('e1');
+            assert.isFalse(window.send.called);
+            Raven.captureMessage('e2');
+            assert.isFalse(window.send.called);
+            Raven.captureMessage('Non-ignored error');
+            assert.isTrue(window.send.calledOnce);
         });
     });
 
@@ -1648,6 +1695,16 @@ describe('Raven (public API)', function() {
             Raven.captureException(true);
             assert.equal(Raven.captureMessage.lastCall.args[0], true);
             assert.isFalse(TraceKit.report.called);
+        });
+    });
+
+    describe('.isSetup', function() {
+        it('should work as advertised', function() {
+            var isSetup = this.sinon.stub(window, 'isSetup');
+            isSetup.returns(true);
+            assert.isTrue(Raven.isSetup());
+            isSetup.returns(false);
+            assert.isFalse(Raven.isSetup());
         });
     });
 });

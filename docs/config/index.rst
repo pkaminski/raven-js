@@ -35,6 +35,19 @@ The name of the logger used by Sentry. Default: ``javascript``
       logger: 'javascript'
     }
 
+release
+-------
+
+Track the version of your application in Sentry.
+
+.. code-block:: javascript
+
+    {
+      release: '721e41770371db95eee98ca2707686226b993eda'
+    }
+
+Can also be defined with ``Raven.setReleaseContext('721e41770371db95eee98ca2707686226b993eda')``.
+
 .. _config-whitelist-urls:
 
 tags
@@ -107,7 +120,7 @@ A function that allows mutation of the data payload right before being sent to S
 
     {
         dataCallback: function(data) {
-          // do somethign to data
+          // do something to data
           return data;
         }
     }

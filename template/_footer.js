@@ -1,8 +1,9 @@
 // Expose Raven to the world
 if (typeof define === 'function' && define.amd) {
     // AMD
-    define('raven', function(Raven) {
-      return (window.Raven = Raven);
+    window.Raven = Raven;
+    define('raven', [], function() {
+      return Raven;
     });
 } else if (typeof module === 'object') {
     // browserify

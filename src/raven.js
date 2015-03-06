@@ -76,12 +76,8 @@ var Raven = {
 
         // "Script error." is hard coded into browsers for errors that it can't read.
         // this is the result of a script being pulled in from an external domain and CORS.
-        globalOptions.ignoreErrors.push('Script error.');
-        globalOptions.ignoreErrors.push('Script error');
-
-        // Other variants of external script errors:
-        globalOptions.ignoreErrors.push('Javascript error: Script error on line 0');
-        globalOptions.ignoreErrors.push('Javascript error: Script error. on line 0');
+        globalOptions.ignoreErrors.push(/^Script error\.?$/);
+        globalOptions.ignoreErrors.push(/^Javascript error: Script error\.? on line 0$/);
 
         // join regexp rules into one big rule
         globalOptions.ignoreErrors = joinRegExp(globalOptions.ignoreErrors);
@@ -265,6 +261,13 @@ var Raven = {
      * @return {Raven}
      */
     captureMessage: function(msg, options) {
+        // config() automagically converts ignoreErrors from a list to a RegExp so we need to test for an
+        // early call; we'll error on the side of logging anything called before configuration since it's
+        // probably something you should see:
+        if (!!globalOptions.ignoreErrors.test && globalOptions.ignoreErrors.test(msg)) {
+            return;
+        }
+
         // Fire away!
         send(
             objectMerge({
@@ -282,9 +285,9 @@ var Raven = {
      * @return {Raven}
      */
     setUserContext: function(user) {
-       globalUser = user;
+        globalUser = user;
 
-       return Raven;
+        return Raven;
     },
 
     /*
@@ -294,9 +297,9 @@ var Raven = {
      * @return {Raven}
      */
     setExtraContext: function(extra) {
-       globalOptions.extra = extra || {};
+        globalOptions.extra = extra || {};
 
-       return Raven;
+        return Raven;
     },
 
     /*
@@ -306,9 +309,21 @@ var Raven = {
      * @return {Raven}
      */
     setTagsContext: function(tags) {
-       globalOptions.tags = tags || {};
+        globalOptions.tags = tags || {};
 
-       return Raven;
+        return Raven;
+    },
+
+    /*
+     * Set release version of application
+     *
+     * @param {string} release Typically something like a git SHA to identify version
+     * @return {Raven}
+     */
+    setReleaseContext: function(release) {
+        globalOptions.release = release;
+
+        return Raven;
     },
 
     /*
@@ -327,6 +342,15 @@ var Raven = {
      */
     lastEventId: function() {
         return lastEventId;
+    },
+
+    /*
+     * Determine if Raven is setup and ready to go.
+     *
+     * @return {boolean}
+     */
+    isSetup: function() {
+        return isSetup();
     }
 };
 
@@ -649,7 +673,6 @@ function send(data) {
     data = objectMerge({
         project: globalProject,
         logger: globalOptions.logger,
-        site: globalOptions.site,
         platform: 'javascript',
         // sentry.interfaces.Http
         request: getHttpData()
@@ -671,6 +694,9 @@ function send(data) {
         // sentry.interfaces.User
         data.user = globalUser;
     }
+
+    // Include the release iff it's defined in globalOptions
+    if (globalOptions.release) data.release = globalOptions.release;
 
     if (isFunction(globalOptions.dataCallback)) {
         data = globalOptions.dataCallback(data);
