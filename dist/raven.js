@@ -1,10 +1,10 @@
-/*! Raven.js 1.1.16 (1955093) | github.com/getsentry/raven-js */
+/*! Raven.js 1.1.16 (761f39c) | github.com/getsentry/raven-js */
 
 /*
  * Includes TraceKit
  * https://github.com/getsentry/TraceKit
  *
- * Copyright 2014 Matt Robenolt and other contributors
+ * Copyright 2015 Matt Robenolt and other contributors
  * Released under the BSD license
  * https://github.com/getsentry/raven-js/blob/master/LICENSE
  *
@@ -270,7 +270,6 @@ TraceKit.report = (function reportModuleWrapper() {
  * TraceKit.computeStackTrace: cross-browser stack traces in JavaScript
  *
  * Syntax:
- *   s = TraceKit.computeStackTrace.ofCaller([depth])
  *   s = TraceKit.computeStackTrace(exception) // consider using TraceKit.report instead (see below)
  * Returns:
  *   s.name              - exception name
@@ -318,19 +317,6 @@ TraceKit.report = (function reportModuleWrapper() {
  * exceptions (because your catch block will likely be far away from the
  * inner function that actually caused the exception).
  *
- * Tracing example:
- *     function trace(message) {
- *         var stackInfo = TraceKit.computeStackTrace.ofCaller();
- *         var data = message + "\n";
- *         for(var i in stackInfo.stack) {
- *             var item = stackInfo.stack[i];
- *             data += (item.func || '[anonymous]') + "() in " + item.url + ":" + (item.line || '0') + "\n";
- *         }
- *         if (window.console)
- *             console.info(data);
- *         else
- *             alert(data);
- *     }
  */
 TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
     var debug = false,
@@ -645,7 +631,7 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
             return null;
         }
 
-        var chrome = /^\s*at (\S*) ?\(?((?:file|https?|chrome-extension):.*?):(\d+)(?::(\d+))?\)?\s*$/i,
+        var chrome = /^\s*at (.*?) ?\(?((?:file|https?|chrome-extension):.*?):(\d+)(?::(\d+))?\)?\s*$/i,
             gecko = /^\s*(.*?)(?:\((.*?)\))?@((?:file|https?|chrome).*?):(\d+)(?::(\d+))?\s*$/i,
             lines = ex.stack.split('\n'),
             stack = [],
@@ -1063,25 +1049,10 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
         return {};
     }
 
-    /**
-     * Logs a stacktrace starting from the previous call and working down.
-     * @param {(number|string)=} depth How many frames deep to trace.
-     * @return {Object.<string, *>} Stack trace information.
-     */
-    function computeStackTraceOfCaller(depth) {
-        depth = (depth == null ? 0 : +depth) + 1; // "+ 1" because "ofCaller" should drop one frame
-        try {
-            throw new Error();
-        } catch (ex) {
-            return computeStackTrace(ex, depth + 1);
-        }
-    }
-
     computeStackTrace.augmentStackTraceWithInitialElement = augmentStackTraceWithInitialElement;
     computeStackTrace.computeStackTraceFromStackProp = computeStackTraceFromStackProp;
     computeStackTrace.guessFunctionName = guessFunctionName;
     computeStackTrace.gatherContext = gatherContext;
-    computeStackTrace.ofCaller = computeStackTraceOfCaller;
 
     return computeStackTrace;
 }());
@@ -1164,12 +1135,8 @@ var Raven = {
 
         // "Script error." is hard coded into browsers for errors that it can't read.
         // this is the result of a script being pulled in from an external domain and CORS.
-        globalOptions.ignoreErrors.push('Script error.');
-        globalOptions.ignoreErrors.push('Script error');
-
-        // Other variants of external script errors:
-        globalOptions.ignoreErrors.push('Javascript error: Script error on line 0');
-        globalOptions.ignoreErrors.push('Javascript error: Script error. on line 0');
+        globalOptions.ignoreErrors.push(/^Script error\.?$/);
+        globalOptions.ignoreErrors.push(/^Javascript error: Script error\.? on line 0$/);
 
         // join regexp rules into one big rule
         globalOptions.ignoreErrors = joinRegExp(globalOptions.ignoreErrors);
@@ -1353,6 +1320,13 @@ var Raven = {
      * @return {Raven}
      */
     captureMessage: function(msg, options) {
+        // config() automagically converts ignoreErrors from a list to a RegExp so we need to test for an
+        // early call; we'll error on the side of logging anything called before configuration since it's
+        // probably something you should see:
+        if (!!globalOptions.ignoreErrors.test && globalOptions.ignoreErrors.test(msg)) {
+            return;
+        }
+
         // Fire away!
         send(
             objectMerge({
@@ -1370,9 +1344,9 @@ var Raven = {
      * @return {Raven}
      */
     setUserContext: function(user) {
-       globalUser = user;
+        globalUser = user;
 
-       return Raven;
+        return Raven;
     },
 
     /*
@@ -1382,9 +1356,9 @@ var Raven = {
      * @return {Raven}
      */
     setExtraContext: function(extra) {
-       globalOptions.extra = extra || {};
+        globalOptions.extra = extra || {};
 
-       return Raven;
+        return Raven;
     },
 
     /*
@@ -1394,9 +1368,21 @@ var Raven = {
      * @return {Raven}
      */
     setTagsContext: function(tags) {
-       globalOptions.tags = tags || {};
+        globalOptions.tags = tags || {};
 
-       return Raven;
+        return Raven;
+    },
+
+    /*
+     * Set release version of application
+     *
+     * @param {string} release Typically something like a git SHA to identify version
+     * @return {Raven}
+     */
+    setReleaseContext: function(release) {
+        globalOptions.release = release;
+
+        return Raven;
     },
 
     /*
@@ -1415,6 +1401,15 @@ var Raven = {
      */
     lastEventId: function() {
         return lastEventId;
+    },
+
+    /*
+     * Determine if Raven is setup and ready to go.
+     *
+     * @return {boolean}
+     */
+    isSetup: function() {
+        return isSetup();
     }
 };
 
@@ -1737,7 +1732,6 @@ function send(data) {
     data = objectMerge({
         project: globalProject,
         logger: globalOptions.logger,
-        site: globalOptions.site,
         platform: 'javascript',
         // sentry.interfaces.Http
         request: getHttpData()
@@ -1759,6 +1753,9 @@ function send(data) {
         // sentry.interfaces.User
         data.user = globalUser;
     }
+
+    // Include the release iff it's defined in globalOptions
+    if (globalOptions.release) data.release = globalOptions.release;
 
     if (isFunction(globalOptions.dataCallback)) {
         data = globalOptions.dataCallback(data);
@@ -1856,8 +1853,9 @@ afterLoad();
 // Expose Raven to the world
 if (typeof define === 'function' && define.amd) {
     // AMD
-    define('raven', function(Raven) {
-      return (window.Raven = Raven);
+    window.Raven = Raven;
+    define('raven', [], function() {
+      return Raven;
     });
 } else if (typeof module === 'object') {
     // browserify
